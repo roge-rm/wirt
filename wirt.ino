@@ -21,17 +21,18 @@
 #include <EEPROM.h>
 #include <Wire.h>
 #include <EncButton.h>
-#include <SD.h>  // SD access for saving/restoring data
+
+/*#include <SD.h>  // SD access for saving/restoring data
 
 const int chipSelect = BUILTIN_SDCARD;
-File myFile;
+File myFile; */
 
 #define enc1PinA 24
 #define enc1PinB 25
-#define enc1PinKey 30
+#define enc1PinBut 30
 #define enc2PinA 26
 #define enc2PinB 27
-#define enc2PinKey 31
+#define enc2PinBut 31
 
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
@@ -62,18 +63,21 @@ MIDIDevice *midilist[10] = {
   &midi01, &midi02, &midi03, &midi04, &midi05, &midi06, &midi07, &midi08, &midi09, &midi10
 };
 
-elapsedMillis displayMillis; // ow long the LED has been turned on
+elapsedMillis displayMillis;      // ow long the LED has been turned on
 unsigned long displayTime = 500;  // how long something is displayed for
+unsigned long versionNUM = 20231016;
 
 bool routing = true;  // enable USB to USB MIDI routing
-bool displayUpdate; // used to reduce number of screen updates
+bool displayUpdate;   // used to reduce number of screen updates
+
+bool activityLED = true;  // blink LED when activity is detected
 
 // encoder/button setup
-EncButton<EB_TICK, enc1PinA, enc1PinB, enc1PinKey> enc1;
-EncButton<EB_TICK, enc2PinA, enc2PinB, enc2PinKey> enc2;
+EncButton enc1(enc1PinA, enc1PinB, enc1PinBut, INPUT_PULLUP);
+EncButton enc2(enc2PinA, enc2PinB, enc2PinBut, INPUT_PULLUP);
 
 void setup() {
-  Serial.begin(9600); // for debugging
+  Serial.begin(9600);  // for debugging
 
   pinMode(13, OUTPUT);  // LED pin
   digitalWrite(13, LOW);
@@ -103,7 +107,8 @@ void setup() {
 
   displayCentre("wirt", 15, 2);
   displayCentre("MIDI router", 35, 1);
-  delay(1500);
+  displayCentre(versionNUM, 55, 1);
+  delay(1250);
 
   /* SD stuff, not fleshed out yet
   Serial.print("Initializing SD card...");
@@ -140,6 +145,8 @@ void setup() {
 }
 
 void loop() {
+  bool activity = false;
+
   myusb.Task();
 
   encUpdate();  // update encoders
@@ -148,6 +155,7 @@ void loop() {
   // first read messages from the TRS MIDI IN port
   if (MIDI.read()) {
     sendToComputer(MIDI.getType(), MIDI.getData1(), MIDI.getData2(), MIDI.getChannel(), MIDI.getSysExArray(), 0);
+    activity = true;
   }
 
   // next read messages arriving from the devices plugged into the USB hub
@@ -168,6 +176,7 @@ void loop() {
 
       midi::MidiType mtype = (midi::MidiType)type;
       MIDI.send(mtype, data1, data2, channel);
+      activity = true;
     }
   }
 
@@ -193,6 +202,18 @@ void loop() {
       // SysEx messages are special.  The message length is given in data1 & data2
       unsigned int SysExLength = data1 + data2 * 256;
       MIDI.sendSysEx(SysExLength, usbMIDI.getSysExArray(), true);
+    }
+    activity = true;
+  }
+
+  // blink the LED when any activity has happened
+  if (activityLED) { // but only if the activity LED is enabled
+    if (activity) {
+      digitalWriteFast(13, HIGH);  // LED on
+      displayMillis = 0;
+    }
+    if (displayMillis > 15) {
+      digitalWriteFast(13, LOW);  // LED off
     }
   }
 
@@ -235,13 +256,13 @@ void encAction() {  // do things when encoders are modified
     displayUpdate = true;
     displayMillis = 0;
     displayTime = 1000;
-  } else if (enc1.isLeft()) {
+  } else if (enc1.left()) {
     display.clearDisplay();
     displayCentre("enc1 left", 20, 1);
     displayUpdate = true;
     displayMillis = 0;
     displayTime = 1000;
-  } else if (enc1.isRight()) {
+  } else if (enc1.right()) {
     display.clearDisplay();
     displayCentre("enc1 right", 20, 1);
     displayUpdate = true;
@@ -255,7 +276,7 @@ void encAction() {  // do things when encoders are modified
     displayUpdate = true;
     displayMillis = 0;
     displayTime = 1500;
-  } else if (enc2.isLeft()) {  // disable USB routing
+  } else if (enc2.left()) {  // disable USB routing
     display.clearDisplay();
     routing = false;
     displayCentre("routing", 20, 1);
@@ -263,7 +284,7 @@ void encAction() {  // do things when encoders are modified
     displayUpdate = true;
     displayMillis = 0;
     displayTime = 1500;
-  } else if (enc2.isRight()) {  // enable USB routing
+  } else if (enc2.right()) {  // enable USB routing
     display.clearDisplay();
     routing = true;
     displayCentre("routing", 20, 1);
