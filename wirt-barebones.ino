@@ -83,15 +83,6 @@ void loop() {
       MIDI.send(mtype, data1, data2, channel);
       activity = true;
     }
-
-    // blink the LED when any activity has happened
-    if (activity) {
-      digitalWriteFast(13, HIGH);  // LED on
-      displayMillis = 0;
-    }
-    if (displayMillis > 15) {
-      digitalWriteFast(13, LOW);  // LED off
-    }
   }
 
   // read messages from PC/host device
@@ -117,6 +108,16 @@ void loop() {
       unsigned int SysExLength = data1 + data2 * 256;
       MIDI.sendSysEx(SysExLength, usbMIDI.getSysExArray(), true);
     }
+    activity = true;
+  }
+
+  // blink the LED when any activity has happened
+  if (activity) {
+    digitalWriteFast(13, HIGH);  // LED on
+    displayMillis = 0;
+  }
+  if (displayMillis > 15) {
+    digitalWriteFast(13, LOW);  // LED off
   }
 }
 
